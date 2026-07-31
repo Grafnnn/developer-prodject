@@ -22,9 +22,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build git file
 
-      - name: Build libdxfrw dwg2dxf
+      - name: Build LibreCAD libdxfrw dwg2dxf
         run: |
-          git clone --depth 1 https://github.com/codelibs/libdxfrw.git vendor/libdxfrw
+          git clone --depth 1 https://github.com/LibreCAD/libdxfrw.git vendor/libdxfrw
           cmake -S vendor/libdxfrw -B vendor/libdxfrw-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLIBDXFRW_BUILD_DOC=OFF \
