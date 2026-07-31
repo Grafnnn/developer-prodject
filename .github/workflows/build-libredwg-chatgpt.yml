@@ -20,7 +20,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build git file perl libpcre2-dev
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build git file perl
 
       - name: Build GNU LibreDWG tools
         run: |
@@ -30,14 +30,15 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DDISABLE_WERROR=ON \
             -DENABLE_LTO=OFF \
-            -DBUILD_SHARED_LIBS=OFF
-          cmake --build vendor/libredwg-build --target dwg2dxf dwgread dwglayers dwggrep dwg2SVG --parallel 2
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBREDWG_DISABLE_JSON=ON
+          cmake --build vendor/libredwg-build --target dwg2dxf dwgread dwglayers dwg2SVG --parallel 4
 
       - name: Package tools and provenance
         run: |
           set -euxo pipefail
           mkdir -p artifact/bin
-          for exe in dwg2dxf dwgread dwglayers dwggrep dwg2SVG; do
+          for exe in dwg2dxf dwgread dwglayers dwg2SVG; do
             cp "vendor/libredwg-build/$exe" "artifact/bin/$exe"
             chmod +x "artifact/bin/$exe"
             strip "artifact/bin/$exe" || true
