@@ -1,0 +1,58 @@
+name: Build LibreDWG tools for ChatGPT
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-libredwg-chatgpt.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux-x64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build git file perl libpcre2-dev
+
+      - name: Build GNU LibreDWG tools
+        run: |
+          git clone --depth 1 https://github.com/LibreDWG/libredwg.git vendor/libredwg
+          cmake -S vendor/libredwg -B vendor/libredwg-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DDISABLE_WERROR=ON \
+            -DENABLE_LTO=OFF \
+            -DBUILD_SHARED_LIBS=OFF
+          cmake --build vendor/libredwg-build --target dwg2dxf dwgread dwglayers dwggrep dwg2SVG --parallel 2
+
+      - name: Package tools and provenance
+        run: |
+          set -euxo pipefail
+          mkdir -p artifact/bin
+          for exe in dwg2dxf dwgread dwglayers dwggrep dwg2SVG; do
+            cp "vendor/libredwg-build/$exe" "artifact/bin/$exe"
+            chmod +x "artifact/bin/$exe"
+            strip "artifact/bin/$exe" || true
+          done
+          file artifact/bin/* > artifact/FILE_INFO.txt
+          for exe in artifact/bin/*; do echo "### $exe"; ldd "$exe"; done > artifact/DEPENDENCIES.txt
+          git -C vendor/libredwg rev-parse HEAD > artifact/LIBREDWG_COMMIT.txt
+          sha256sum artifact/bin/* > artifact/SHA256SUMS.txt
+          artifact/bin/dwg2dxf --help > artifact/DWG2DXF_USAGE.txt 2>&1 || true
+          artifact/bin/dwgread --help > artifact/DWGREAD_USAGE.txt 2>&1 || true
+
+      - name: Upload LibreDWG utilities
+        uses: actions/upload-artifact@v4
+        with:
+          name: libredwg-tools-linux-x64
+          path: artifact
+          if-no-files-found: error
+          retention-days: 1
