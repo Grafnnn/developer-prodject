@@ -7,6 +7,12 @@ on:
     paths:
       - 'scripts/audit_plant_exterior.py'
       - '.github/workflows/plant-exterior-audit.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/audit_plant_exterior.py'
+      - '.github/workflows/plant-exterior-audit.yml'
   workflow_dispatch:
 
 permissions:
