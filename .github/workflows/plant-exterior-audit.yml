@@ -1,0 +1,47 @@
+name: Plant model exterior audit
+
+on:
+  push:
+    branches:
+      - plant-model-revP2
+    paths:
+      - 'scripts/audit_plant_exterior.py'
+      - '.github/workflows/plant-exterior-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+
+      - name: Install Blender and download tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender file
+          python3 -m pip install --upgrade pip gdown
+
+      - name: Download current A.1 LOD400-P GLB from project Drive
+        run: |
+          mkdir -p work/input work/audit
+          gdown --id 1HD4OKCHRe9rDdnl1iO3ULP5P8VxUMqGa -O work/input/current_A1_LOD400P.glb
+          file work/input/current_A1_LOD400P.glb
+          test $(stat -c%s work/input/current_A1_LOD400P.glb) -gt 1000000
+
+      - name: Run geometry inventory, exterior audit and control renders
+        run: |
+          blender -b --python scripts/audit_plant_exterior.py -- \
+            work/input/current_A1_LOD400P.glb work/audit
+
+      - name: Upload short-lived audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plant-A1-exterior-audit
+          path: work/audit
+          retention-days: 1
+          if-no-files-found: error
