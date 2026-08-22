@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   MODEL_URL: 'https://at.adobe.com/2r9t5QbvWbcgmKR9'
@@ -17,45 +17,88 @@ env:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: plant-model-exterior-fix
+          fetch-depth: 0
 
-      - name: Install Blender
+      - name: Run Blender exterior audit
+        id: audit
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y blender
-          blender --version
+          set +e
+          mkdir -p work/audit audit-output
+          {
+            echo "=== RUN METADATA ==="
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "commit=${GITHUB_SHA}"
+            echo "date=$(date -u +%FT%TZ)"
+            echo
+            echo "=== INSTALL BLENDER ==="
+            sudo apt-get update
+            sudo apt-get install -y blender
+            blender --version
+            INSTALL_RC=$?
+            echo "install_rc=${INSTALL_RC}"
+            echo
+            echo "=== DOWNLOAD MODEL ==="
+            curl --fail --location --retry 4 --retry-delay 3 "$MODEL_URL" -o work/source.glb
+            DOWNLOAD_RC=$?
+            echo "download_rc=${DOWNLOAD_RC}"
+            if [ -f work/source.glb ]; then
+              file work/source.glb
+              ls -lh work/source.glb
+              python3 - <<'PY'
+from pathlib import Path
+p=Path('work/source.glb')
+if p.exists():
+    print('header=',p.read_bytes()[:24])
+PY
+            fi
+            echo
+            echo "=== RUN AUDIT ==="
+            if [ "$INSTALL_RC" -eq 0 ] && [ "$DOWNLOAD_RC" -eq 0 ] && [ -s work/source.glb ]; then
+              blender --background --python tools/audit_model.py -- work/source.glb work/audit
+              AUDIT_RC=$?
+            else
+              AUDIT_RC=98
+              echo "Audit skipped because install/download failed"
+            fi
+            echo "audit_rc=${AUDIT_RC}"
+            echo "${AUDIT_RC}" > work/audit/exit_code.txt
+            exit 0
+          } 2>&1 | tee work/audit/workflow.log
 
-      - name: Download source GLB
-        run: |
-          mkdir -p work/audit
-          curl --fail --location --retry 4 --retry-delay 3 "$MODEL_URL" -o work/source.glb
-          test -s work/source.glb
-          file work/source.glb
-          ls -lh work/source.glb
-
-      - name: Run exterior audit and render diagnostic views
-        run: |
-          blender --background --python tools/audit_model.py -- work/source.glb work/audit
-
-      - name: Write run metadata
+      - name: Commit audit results to branch
         if: always()
+        shell: bash
         run: |
+          rm -rf audit-output
+          mkdir -p audit-output
+          if [ -d work/audit ]; then cp -a work/audit/. audit-output/; fi
           {
             echo "run_id=${GITHUB_RUN_ID}"
             echo "commit=${GITHUB_SHA}"
             echo "date=$(date -u +%FT%TZ)"
-          } > work/audit/run_metadata.txt
+          } > audit-output/run_metadata.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f audit-output
+          if git diff --cached --quiet; then
+            echo "No audit output changes to commit"
+          else
+            git commit -m "Add exterior audit results [skip ci]"
+            git push origin HEAD:plant-model-exterior-fix
+          fi
 
       - name: Upload audit package
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: plant-model-exterior-audit
-          path: work/audit/**
-          if-no-files-found: error
+          path: audit-output/**
+          if-no-files-found: warn
           retention-days: 7
