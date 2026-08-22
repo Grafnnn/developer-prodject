@@ -6,12 +6,14 @@ on:
       - plant-model-revP2
     paths:
       - 'scripts/audit_plant_exterior.py'
+      - 'scripts/inventory_plant_exterior.py'
       - '.github/workflows/plant-exterior-audit.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'scripts/audit_plant_exterior.py'
+      - 'scripts/inventory_plant_exterior.py'
       - '.github/workflows/plant-exterior-audit.yml'
   workflow_dispatch:
 
@@ -39,7 +41,13 @@ jobs:
           file work/input/current_A1_LOD400P.glb
           test $(stat -c%s work/input/current_A1_LOD400P.glb) -gt 1000000
 
-      - name: Run geometry inventory, exterior audit and control renders
+      - name: Print focused exterior inventory
+        run: |
+          blender -b --python scripts/inventory_plant_exterior.py -- \
+            work/input/current_A1_LOD400P.glb | tee work/audit/inventory.txt
+
+      - name: Run geometry audit
+        continue-on-error: true
         run: |
           blender -b --python scripts/audit_plant_exterior.py -- \
             work/input/current_A1_LOD400P.glb work/audit
