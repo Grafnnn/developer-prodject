@@ -35,7 +35,7 @@ jobs:
       - name: Download current A.1 LOD400-P GLB from project Drive
         run: |
           mkdir -p work/input work/audit
-          gdown --id 1HD4OKCHRe9rDdnl1iO3ULP5P8VxUMqGa -O work/input/current_A1_LOD400P.glb
+          gdown 1HD4OKCHRe9rDdnl1iO3ULP5P8VxUMqGa -O work/input/current_A1_LOD400P.glb
           file work/input/current_A1_LOD400P.glb
           test $(stat -c%s work/input/current_A1_LOD400P.glb) -gt 1000000
 
