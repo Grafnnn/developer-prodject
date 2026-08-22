@@ -26,10 +26,10 @@ jobs:
       - name: Checkout audit branch
         uses: actions/checkout@v4
 
-      - name: Install Blender and download tools
+      - name: Install Blender and runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender file
+          sudo apt-get install -y blender file python3-numpy
           python3 -m pip install --upgrade pip gdown
 
       - name: Download current A.1 LOD400-P GLB from project Drive
@@ -43,6 +43,13 @@ jobs:
         run: |
           blender -b --python scripts/audit_plant_exterior.py -- \
             work/input/current_A1_LOD400P.glb work/audit
+
+      - name: Print audit summary
+        if: always()
+        run: |
+          if [ -f work/audit/audit_summary.json ]; then
+            cat work/audit/audit_summary.json
+          fi
 
       - name: Upload short-lived audit artifact
         uses: actions/upload-artifact@v4
