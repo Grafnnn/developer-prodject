@@ -1,0 +1,61 @@
+name: Plant model exterior audit
+
+on:
+  push:
+    branches: [plant-model-exterior-fix]
+    paths:
+      - '.github/workflows/plant_model_audit.yml'
+      - 'tools/audit_model.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MODEL_URL: 'https://at.adobe.com/2r9t5QbvWbcgmKR9'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: plant-model-exterior-fix
+
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender
+          blender --version
+
+      - name: Download source GLB
+        run: |
+          mkdir -p work/audit
+          curl --fail --location --retry 4 --retry-delay 3 "$MODEL_URL" -o work/source.glb
+          test -s work/source.glb
+          file work/source.glb
+          ls -lh work/source.glb
+
+      - name: Run exterior audit and render diagnostic views
+        run: |
+          blender --background --python tools/audit_model.py -- work/source.glb work/audit
+
+      - name: Write run metadata
+        if: always()
+        run: |
+          {
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "commit=${GITHUB_SHA}"
+            echo "date=$(date -u +%FT%TZ)"
+          } > work/audit/run_metadata.txt
+
+      - name: Upload audit package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plant-model-exterior-audit
+          path: work/audit/**
+          if-no-files-found: error
+          retention-days: 7
