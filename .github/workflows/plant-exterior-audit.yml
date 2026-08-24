@@ -1,0 +1,103 @@
+name: Plant model A1 RevP2 exterior correction
+
+on:
+  push:
+    branches:
+      - plant-model-revP2
+    paths:
+      - 'scripts/correct_plant_exterior_revp2.py'
+      - 'scripts/inventory_plant_exterior.py'
+      - '.github/workflows/plant-exterior-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  correct-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: plant-model-revP2
+          fetch-depth: 0
+
+      - name: Install Blender and runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender file python3-numpy zip
+          python3 -m pip install --upgrade pip gdown
+
+      - name: Download current A.1 LOD400-P GLB from project Drive
+        run: |
+          mkdir -p work/input work/inventory work/revP2 artifacts/plant_revP2
+          gdown 1HD4OKCHRe9rDdnl1iO3ULP5P8VxUMqGa -O work/input/current_A1_LOD400P.glb
+          file work/input/current_A1_LOD400P.glb
+          test $(stat -c%s work/input/current_A1_LOD400P.glb) -gt 1000000
+
+      - name: Inventory source exterior geometry
+        run: |
+          blender -b --python scripts/inventory_plant_exterior.py -- \
+            work/input/current_A1_LOD400P.glb | tee work/inventory/inventory_before.txt
+
+      - name: Correct exterior geometry, increase LOD and re-audit
+        run: |
+          blender -b --python scripts/correct_plant_exterior_revp2.py -- \
+            work/input/current_A1_LOD400P.glb work/revP2 | tee work/revP2/build_log.txt
+
+      - name: Validate deliverables
+        run: |
+          test -s work/revP2/20_Модель_A1_RevP2_ExteriorQA.glb
+          test -s work/revP2/20_Модель_A1_RevP2_ExteriorQA.blend
+          test -s work/revP2/20_Аудит_A1_RevP2_ExteriorQA.json
+          test -s work/revP2/20_Отчет_внешней_координации_A1_RevP2.html
+          file work/revP2/20_Модель_A1_RevP2_ExteriorQA.glb
+          cat work/revP2/20_Аудит_A1_RevP2_ExteriorQA.json
+
+      - name: Build complete package
+        run: |
+          cp work/inventory/inventory_before.txt work/revP2/20_Инвентаризация_исходной_модели.txt
+          cd work/revP2
+          zip -r 20_Комплект_A1_RevP2_ExteriorQA.zip . \
+            -x '20_Комплект_A1_RevP2_ExteriorQA.zip'
+
+      - name: Copy curated review files to branch
+        run: |
+          rm -rf artifacts/plant_revP2/*
+          cp work/revP2/20_Модель_A1_RevP2_ExteriorQA.glb artifacts/plant_revP2/
+          cp work/revP2/20_Аудит_A1_RevP2_ExteriorQA.json artifacts/plant_revP2/
+          cp work/revP2/20_Отчет_внешней_координации_A1_RevP2.html artifacts/plant_revP2/
+          cp work/revP2/20_Ведомость_исправлений_A1_RevP2.csv artifacts/plant_revP2/
+          cp work/revP2/20_README_A1_RevP2_ExteriorQA.txt artifacts/plant_revP2/
+          cp work/revP2/renders/20_A1_RevP2_01_птичий_полет.png artifacts/plant_revP2/
+          cp work/revP2/renders/20_A1_RevP2_02_генплан_сверху.png artifacts/plant_revP2/
+          cp work/revP2/renders/20_A1_RevP2_03_восточный_серпантин.png artifacts/plant_revP2/
+          cp work/revP2/renders/20_A1_RevP2_04_нижний_въезд.png artifacts/plant_revP2/
+
+      - name: Commit curated model and QA outputs
+        run: |
+          git config user.name 'OpenAI Project Automation'
+          git config user.email 'noreply@openai.com'
+          git add artifacts/plant_revP2
+          git commit -m 'Generate A.1 Rev.P2 exterior corrected model and QA' || true
+          git push origin HEAD:plant-model-revP2
+
+      - name: Upload complete short-lived package
+        uses: actions/upload-artifact@v4
+        with:
+          name: plant-A1-RevP2-ExteriorQA-complete
+          path: |
+            work/revP2/20_Комплект_A1_RevP2_ExteriorQA.zip
+            work/revP2/20_Модель_A1_RevP2_ExteriorQA.glb
+            work/revP2/20_Модель_A1_RevP2_ExteriorQA.blend
+            work/revP2/20_Модель_A1_RevP2_ExteriorQA.obj
+            work/revP2/20_Модель_A1_RevP2_ExteriorQA.mtl
+            work/revP2/20_Аудит_A1_RevP2_ExteriorQA.json
+            work/revP2/20_Ведомость_исправлений_A1_RevP2.csv
+            work/revP2/20_Отчет_внешней_координации_A1_RevP2.html
+            work/revP2/20_README_A1_RevP2_ExteriorQA.txt
+            work/revP2/renders
+          retention-days: 1
+          if-no-files-found: error
