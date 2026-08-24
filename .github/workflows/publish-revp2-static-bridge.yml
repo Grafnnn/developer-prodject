@@ -1,0 +1,79 @@
+name: Publish A1 RevP2 Static Bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-revp2-static-bridge.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download unchanged files from the verified Rev.P2 transfer commit
+        env:
+          SOURCE_BASE: https://raw.githubusercontent.com/Grafnnn/dev-pro/2af60d5b22917bf28f24685e42d9d83f519524f9/transfer_ready
+        run: |
+          rm -rf public/revp2
+          mkdir -p public/revp2
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
+          import hashlib
+          import os
+          import requests
+
+          base = os.environ['SOURCE_BASE']
+          files = {
+              'A1_RevP2_ExteriorQA.glb': ('20_Модель_A1_RevP2_ExteriorQA.glb', 'cb26e1ac38f7919c522d4d289d952ed3a5e543e5cec3759ed4a3ea96e8f278fd'),
+              'A1_RevP2_ExteriorQA.obj': ('20_Модель_A1_RevP2_ExteriorQA.obj', 'c7e0cb8ead46ab4297da0f6526f1cae31cf07c9aa64d91c5b133f9fb496ce2f7'),
+              'A1_RevP2_Full_Package.zip': ('20_Комплект_A1_RevP2_ExteriorQA.zip', '8725db21abbe2df7038b4eb610c2e2edbaa8398e3d9cf21fcdb8c2a827b761ea'),
+              'A1_RevP2_QA_Report.json': ('20_Exterior_QA_Report.json', '360645bcbb3c97cada02cb857fd7551919924d0744da355ecdeaa470dfbd1b46'),
+              'A1_RevP2_SHA256SUMS.txt': ('20_SHA256SUMS.txt', '8a72eff7870a956ec4dd4983c8dba78ab1de205d5fd008d6bfd4f09a067d8a8d'),
+              'A1_RevP2_README.md': ('20_README_RevP2.md', '3124ace751365c5d053e2860f5e5c83e0fc466f844a13a0bd151a5ed48e09cff'),
+          }
+          out = Path('public/revp2')
+          for alias, (source_name, expected) in files.items():
+              url = base + '/' + quote(source_name)
+              response = requests.get(url, timeout=300)
+              response.raise_for_status()
+              data = response.content
+              digest = hashlib.sha256(data).hexdigest()
+              if digest != expected:
+                  raise SystemExit(f'{source_name}: checksum mismatch {digest} != {expected}')
+              (out / alias).write_bytes(data)
+              print(alias, len(data), digest)
+          PY
+
+      - name: Create a public index with direct immutable-byte links
+        run: |
+          cat > public/revp2/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><title>A1 Rev.P2 file bridge</title></head>
+          <body><h1>A1 / Rev.P2 — unchanged verified files</h1><ul>
+          <li><a href="./A1_RevP2_ExteriorQA.glb">A1_RevP2_ExteriorQA.glb</a></li>
+          <li><a href="./A1_RevP2_ExteriorQA.obj">A1_RevP2_ExteriorQA.obj</a></li>
+          <li><a href="./A1_RevP2_Full_Package.zip">A1_RevP2_Full_Package.zip</a></li>
+          <li><a href="./A1_RevP2_QA_Report.json">A1_RevP2_QA_Report.json</a></li>
+          <li><a href="./A1_RevP2_SHA256SUMS.txt">A1_RevP2_SHA256SUMS.txt</a></li>
+          <li><a href="./A1_RevP2_README.md">A1_RevP2_README.md</a></li>
+          </ul></body></html>
+          HTML
+
+      - name: Commit exact-byte static bridge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f public/revp2/
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish unchanged verified A1 Rev.P2 files [skip ci]"
+          git push origin HEAD:main
